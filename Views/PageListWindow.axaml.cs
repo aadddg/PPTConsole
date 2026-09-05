@@ -35,12 +35,40 @@ public partial class PageListWindow : Window
         _onJump = onJump;
     }
 
-    /// <summary>重建页面网格。页码从 1 到 pageCount。</summary>
+    /// <summary>重建页面网格（仅页码块，先弹出面板）。缩略图由 LoadThumbnailsAsync 异步补上。</summary>
     public void Build(int pageCount)
     {
         Grid.Children.Clear();
         for (int i = 1; i <= pageCount; i++)
             AddTile(i);
+    }
+
+    /// <summary>
+    /// 异步逐页补上缩略图（COM 导出须在 UI/STA 线程，页与页之间让出消息泵，
+    /// 面板立即弹出、缩略图逐页浮现——避免大演示同步导出卡 UI 数秒）。
+    /// </summary>
+    public async Task LoadThumbnailsAsync(int pageCount)
+    {
+        for (int i = 1; i <= pageCount; i++)
+        {
+            var grid = TileGrid(i);
+            if (grid is null)
+                continue;   // 面板已被关闭/重建
+
+            var tmp = _bridge?.ExportSlideImage(i, 240, 135);
+            if (tmp is not null)
+                await LoadThumbnailAsync(grid, tmp);
+
+            await Task.Delay(1);   // 让出 UI 线程渲染
+        }
+    }
+
+    /// <summary>按序号取对应 tile 的内层 Grid（Build 后序号即 Z 顺序）。</summary>
+    private Grid? TileGrid(int index)
+    {
+        if (index < 1 || index > Grid.Children.Count)
+            return null;
+        return (Grid?)((Border?)Grid.Children[index - 1])?.Child;
     }
 
     /// <summary>摆放在指定显示器上、中胶囊正上方（水平居中，下缘留间隔）。</summary>
@@ -101,10 +129,6 @@ public partial class PageListWindow : Window
         });
         tile.Child = grid;
         Grid.Children.Add(tile);
-
-        var tmp = _bridge?.ExportSlideImage(index, (int)TileWidth * 2, (int)TileHeight * 2);
-        if (tmp is not null)
-            _ = LoadThumbnailAsync(grid, tmp);
     }
 
     private static async Task LoadThumbnailAsync(Grid grid, string path)

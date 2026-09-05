@@ -29,6 +29,7 @@ public partial class App : Application
     private IClassicDesktopStyleApplicationLifetime? _desktop;
 
     private bool _comPages;          // COM 页码是否接管（接管后墨迹页码由轮询校准）
+    private int _lastSlideCount = -1; // 上次接管的演示页数（变化 = 切换了演示，需清墨迹）
     private Screen? _activeScreen;   // 当前放映屏（页面列表面板定位用）
     private PageListWindow? _pageList;   // 当前页面列表面板（同一时刻至多一个）
 
@@ -130,8 +131,17 @@ public partial class App : Application
         // COM 桥：附着 PowerPoint，取真实页数/当前页并开始轮询校准。
         // 连接失败（PowerPoint 未运行 / 未放映）则回到内部计数兜底。
         _comPages = _bridge?.Connect() ?? false;
-        if (_comPages && _bridge is not null && _bridge.CurrentSlide > 0)
-            _ink.SetCurrentPage(_bridge.CurrentSlide);
+        if (_comPages && _bridge is not null)
+        {
+            // 页数变化 = 切换了演示：旧墨迹按页码会错位映射，全部清空
+            if (_bridge.SlideCount > 0 && _lastSlideCount > 0 && _bridge.SlideCount != _lastSlideCount)
+                _ink.ClearAllInk();
+            if (_bridge.SlideCount > 0)
+                _lastSlideCount = _bridge.SlideCount;
+
+            if (_bridge.CurrentSlide > 0)
+                _ink.SetCurrentPage(_bridge.CurrentSlide);
+        }
 
         _ink.AttachTo(screen);      // 墨迹层先就位（控制条保持在最上）
         _console.ShowOn(screen);
@@ -182,6 +192,10 @@ public partial class App : Application
         _pageList = list;
         list.Show();
         list.Topmost = true;
+
+        // 缩略图异步逐页导出：面板先弹出（页码块），COM 导出不阻塞显示
+        if (_comPages)
+            _ = list.LoadThumbnailsAsync(count);
     }
 
     /// <summary>页面列表跳页：COM 路径走 GotoSlide（轮询校准墨迹页码），兜底路径直设墨迹页码。</summary>

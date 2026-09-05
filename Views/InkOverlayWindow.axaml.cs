@@ -178,6 +178,13 @@ public partial class InkOverlayWindow : Window
         RebuildCanvas();
     }
 
+    /// <summary>清空全部按页墨迹记忆（检测到切换演示时调用，避免旧墨迹错位映射到新演示）。</summary>
+    public void ClearAllInk()
+    {
+        _pages.Clear();
+        RebuildCanvas();
+    }
+
     // ---------------- 指针处理 ----------------
 
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)

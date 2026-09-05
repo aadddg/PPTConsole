@@ -15,7 +15,6 @@
 ## 构建
 
 ```bash
-cd PptConsole
 dotnet restore
 dotnet build -c Debug
 dotnet publish -c Release -r win-x64 --self-contained false
