@@ -26,8 +26,9 @@ internal sealed class SlideshowWatcher
     /// <summary>放映程序进程名（小写，含扩展名）：MS PowerPoint / WPS 演示。</summary>
     private static readonly string[] SlideProcessNames =
     {
-        "powerpnt.exe",
-        "wpp.exe",
+        "powerpnt.exe",     // MS PowerPoint
+        "wpp.exe",          // WPS 演示（放映进程，任务管理器显示为 "WPS Presentation"）
+        "wps.exe",          // WPS 主程序（部分版本放映也挂在该进程）
     };
 
     /// <summary>放映窗口标题关键词（WPS 中文 / MS PowerPoint 中英文）。</summary>
@@ -39,8 +40,8 @@ internal sealed class SlideshowWatcher
     };
 
     private const int PollMilliseconds = 1000;
-    /// <summary>连续 N 次找不到才判定放映结束（防放映切换期的窗口抖动）。</summary>
-    private const int EndConfirmCount = 2;
+    /// <summary>连续 N 次找不到才判定放映结束（防放映切换期/WPS 窗口短暂抖动误判收回）。</summary>
+    private const int EndConfirmCount = 3;
 
     private DispatcherTimer? _timer;
     private bool _running;
@@ -111,9 +112,12 @@ internal sealed class SlideshowWatcher
     }
 
     /// <summary>
-    /// 三重判定：进程名 ∈ {powerpnt,wpp}.exe 是硬条件（杜绝其他软件的误报），
-    /// 类名或标题任一命中即认定为放映窗口。
-    /// 进程名获取失败（权限受限，如放映程序以管理员运行）时退化为纯类名匹配。
+    /// 判定逻辑（三重信号，防误报）：
+    /// - 类名 ∈ {screenClass, wppslideshowwnd}：强信号，直接命中；
+    /// - 标题含"幻灯片放映/Slide Show"：极特异（用户实测 WPS 放映窗标题
+    ///   "WPS演示幻灯片放映-[xxx.pptx]"），即使进程名不在候选也接受；
+    /// - 进程名 ∈ {powerpnt,wpp,wps}.exe：作为已知放映程序的确认；
+    /// 进程名获取失败（权限受限）时退化为"类名或标题"匹配。
     /// </summary>
     private static bool IsSlideshowWindow(string cls, string title, string process)
     {
@@ -122,12 +126,13 @@ internal sealed class SlideshowWatcher
             Array.Exists(SlideTitleKeywords, k => title.Contains(k, StringComparison.OrdinalIgnoreCase));
 
         if (process.Length == 0)
-            return classMatch;   // 拿不到进程名 → 退回类名匹配
+            return classMatch || titleMatch;   // 拿不到进程名：标题"幻灯片放映"足够特异
 
-        if (Array.IndexOf(SlideProcessNames, process) < 0)
-            return false;
+        if (Array.IndexOf(SlideProcessNames, process) >= 0)
+            return classMatch || titleMatch;
 
-        return classMatch || titleMatch;
+        // 进程不是已知放映程序：仅标题命中才接受（防其他软件误报）
+        return titleMatch;
     }
 
     private static string GetWindowTitle(IntPtr hwnd)

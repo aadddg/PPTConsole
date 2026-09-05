@@ -32,15 +32,17 @@ internal static class CapsuleBehavior
         window.Opened += (_, _) => ApplyNoActivate(window);
     }
 
-    /// <summary>设置 NOACTIVATE：点击不抢放映焦点。</summary>
+    /// <summary>设置 NOACTIVATE（点击不抢放映焦点）+ TOOLWINDOW（不进任务栏/Alt+Tab）。</summary>
     public static void ApplyNoActivate(Window window)
     {
         var handle = window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
         if (handle == IntPtr.Zero) return;
 
         int ex = (int)Win32Interop.GetWindowLongPtr(handle, Win32Interop.GWL_EXSTYLE);
+        ex |= Win32Interop.WS_EX_NOACTIVATE;
+        ex |= Win32Interop.WS_EX_TOOLWINDOW;   // 任务栏兜底：ShowInTaskbar 之外再保证不进任务栏
         Win32Interop.SetWindowLongPtr(handle, Win32Interop.GWL_EXSTYLE,
-            new IntPtr(ex | Win32Interop.WS_EX_NOACTIVATE));
+            new IntPtr(ex));
     }
 
     /// <summary>重新压回最顶（墨迹层切入交互态后调用）。</summary>

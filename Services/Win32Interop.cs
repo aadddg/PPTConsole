@@ -13,6 +13,7 @@ internal static class Win32Interop
     public const int GWL_EXSTYLE = -20;
     public const int WS_EX_TOPMOST = 0x00000008;
     public const int WS_EX_TRANSPARENT = 0x00000020;   // 点击穿透（墨迹层"选择"态）
+    public const int WS_EX_TOOLWINDOW = 0x00000080;     // 不进任务栏 / 不参与 Alt+Tab（ShowInTaskbar 的 Win32 兜底）
     public const int WS_EX_LAYERED = 0x00080000;
     public const int WS_EX_NOACTIVATE = 0x08000000;    // 点击不抢焦点（放映保持前台，键击才不会被吞）
 
