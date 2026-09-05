@@ -6,6 +6,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using PptConsole.Services;
 
 namespace PptConsole.Views;
@@ -24,7 +25,7 @@ public partial class PageListWindow : Window
     private readonly int _current;
     private readonly Action<int> _onJump;
 
-    public PageListWindow(PptComBridge? bridge, int current, Action<int> onJump)
+    internal PageListWindow(PptComBridge? bridge, int current, Action<int> onJump)
     {
         CapsuleBehavior.Init(this);
         InitializeComponent();
@@ -94,8 +95,8 @@ public partial class PageListWindow : Window
             FontFamily = (FontFamily?)(this.FindResource("Hud.FontFamilyNumeric") ?? FontFamily.Default)!,
             FontSize = 26,
             Foreground = Brushes.White,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
             ZIndex = 2,
         });
         tile.Child = grid;

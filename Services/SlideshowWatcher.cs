@@ -6,22 +6,21 @@ using Avalonia.Threading;
 namespace PptConsole.Services;
 
 /// <summary>
-/// 轮询 PowerPoint 放映窗口（窗口类名 screenClass），
+/// 轮询放映窗口（EnumWindows 按类名 + 可见性/非最小化匹配），
 /// 报告放映开始/结束与其所在显示器的物理边界。
-/// WPS 的放映窗口类名未验证，后续在 SlideClasses 里追加即可。
+/// WPS 的放映窗口类名未逐项验证，后续在 SlideClasses 里追加即可。
 /// </summary>
 internal sealed class SlideshowWatcher
 {
     /// <summary>
-    /// 放映窗口类名候选（MS PowerPoint = screenClass）。
-    /// 以下 WPS 候选由公开资料推断，未在真机逐项验证——
-    /// 冗余项只是让 FindWindow 多试一次，命中错类名会得到空句柄、无副作用。
+    /// 放映窗口类名候选（MS PowerPoint = screenClass；WPS 演示放映 = wppslideshowwnd）。
+    /// 不再使用 WPS 通用主窗 KWMainFrame —— 它不放映也存在，命中即误报。
+    /// 匹配时走 EnumWindows + 可见性/非最小化校验，排除隐藏或最小化的同名窗口。
     /// </summary>
     private static readonly string[] SlideClasses =
     {
-        "screenClass",          // MS PowerPoint
-        "wppslideshowwnd",      // WPS 演示（候选，未验证）
-        "KWMainFrame",          // WPS 通用主窗（候选，未验证）
+        "screenClass",          // MS PowerPoint 放映窗
+        "wppslideshowwnd",      // WPS 演示放映窗（候选，未逐项验证）
     };
 
     private const int PollMilliseconds = 1000;
@@ -74,13 +73,33 @@ internal sealed class SlideshowWatcher
 
     private static IntPtr Find()
     {
-        foreach (var cls in SlideClasses)
+        IntPtr found = IntPtr.Zero;
+        Win32Interop.EnumWindows((hwnd, _) =>
         {
-            var hwnd = Win32Interop.FindWindow(cls, null);
-            if (hwnd != IntPtr.Zero)
-                return hwnd;
-        }
-        return IntPtr.Zero;
+            // 只认可见、非最小化的顶层窗口（隐藏/最小化的同名窗口不误报放映开始）
+            if (!Win32Interop.IsWindowVisible(hwnd) || Win32Interop.IsIconic(hwnd))
+                return true;
+
+            string cls = GetClassName(hwnd);
+            foreach (var candidate in SlideClasses)
+            {
+                if (cls == candidate)
+                {
+                    found = hwnd;
+                    return false;   // 停止枚举
+                }
+            }
+            return true;
+        }, IntPtr.Zero);
+
+        return found;
+    }
+
+    private static string GetClassName(IntPtr hwnd)
+    {
+        var sb = new System.Text.StringBuilder(256);
+        Win32Interop.GetClassName(hwnd, sb, sb.Capacity);
+        return sb.ToString();
     }
 
     private static PixelRect GetMonitorBounds(IntPtr hwnd)

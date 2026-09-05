@@ -56,15 +56,23 @@ public partial class App : Application
             Dispatcher.UIThread.Post(() => _ink?.SetCurrentPage(page));
 
         // 控制条 → 放映：翻页键击 + 墨迹层页码联动（自绘墨迹按页记忆）
+        // SendInput 被 UIPI 拦截（放映程序管理员运行）时，COM 接管下回退 GotoSlide 跳页。
         _console.PrevRequested += () => Dispatcher.UIThread.Post(() =>
         {
-            InputNative.SendArrowKey(forward: false);
+            if (!InputNative.SendArrowKey(forward: false) && _comPages)
+                _bridge?.GotoSlide(Math.Max(1, (_bridge?.CurrentSlide ?? 1) - 1));
             if (!_comPages)                       // COM 接管时页码由轮询校准
                 _ink?.NotifyPageChanged(-1);
         });
         _console.NextRequested += () => Dispatcher.UIThread.Post(() =>
         {
-            InputNative.SendArrowKey(forward: true);
+            if (!InputNative.SendArrowKey(forward: true) && _comPages)
+            {
+                int count = _bridge?.SlideCount ?? 0;
+                int next = (_bridge?.CurrentSlide ?? 0) + 1;
+                if (count <= 0 || next <= count)
+                    _bridge?.GotoSlide(next);
+            }
             if (!_comPages)
                 _ink?.NotifyPageChanged(1);
         });

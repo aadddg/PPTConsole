@@ -78,6 +78,6 @@ Styles/ ConsoleTheme+Geometries  设计令牌与图标几何
 
 ## 已知边界
 
-- **COM 接管前提**：页码感知/页面列表在 PowerPoint 无放映或连接失败时自动降级为内部计数＋兜底页码，不影响基本翻页。
-- **WPS 兼容**：放映窗口类名候选含 WPS（`wppslideshowwnd`/`KWMainFrame`，未逐项验证）；WPS COM 是否暴露 `PowerPoint.Application` 与 `GotoSlide`/`Slide.Export` 未在真机验证，降级即可用。
-- 若放映程序以管理员运行，`SendInput` 会被 UIPI 拦截，需同权限运行（COM 之下跳页走 `GotoSlide` 可绕开该限制）。
+- **COM 接管前提**：`Connect()` 会校验确实存在活跃放映（已打开演示且处于放映态），否则自动降级为内部计数＋兜底页码——PowerPoint/WPS 未运行、未打开演示或未进入放映时，基本翻页与墨迹页码照常可用。
+- **WPS 兼容**：放映窗口按类名 + 可见性/非最小化匹配（候选 `screenClass` / `wppslideshowwnd`，已排除不放映也存在的 WPS 通用主窗 `KWMainFrame` 误报）；COM 依次尝试 `PowerPoint.Application` / `KWPP.Application`，WPS 的 `GotoSlide`/`Slide.Export` 接口兼容性未在真机逐项验证，失败即降级。
+- **管理员权限（UIPI）**：放映程序以管理员运行时 `SendInput` 会被 UIPI 拦截（返回 0）。已加回退：COM 接管下翻页自动改走 `GotoSlide`（不受 UIPI 限制）；无 COM 时需以同权限运行本程序。
