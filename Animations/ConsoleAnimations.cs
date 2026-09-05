@@ -60,15 +60,15 @@ internal static class ConsoleAnimations
     // ---------------- 工具面板撑高 / 收回（对应原 PillHeight + PillCorner 段） ----------------
 
     /// <summary>
-    /// 面板撑高：高度 0→height（BackOut 生长，对应原 60→90 撑高段），
-    /// 不透明度在前 30% 先行到位，让内容尽早可见。
+    /// 面板撑高：高度 0→height（BackOut 生长，对应原 60→90 撑高段）。
+    /// 不透明度与高度同段同曲线（对齐原 PillAppear：背景显形与形变同步完成，
+    /// 内容则由 PanelRowIn 等结构落位后再错峰显现——"结构先行、内容随后"）。
     /// </summary>
     public static Animation PanelExpand(double height, double bounce = 0.275)
     {
         var a = New(320);
         a.Children.Add(KF(0d, null, H(0d), Op(0)));
-        a.Children.Add(KF(0.3d, KS_Out, Op(1)));
-        a.Children.Add(KF(1d, BackOut(bounce), H(height)));
+        a.Children.Add(KF(1d, BackOut(bounce), H(height), Op(1)));
         return a;
     }
 
@@ -84,25 +84,28 @@ internal static class ConsoleAnimations
 
     /// <summary>
     /// 工具胶囊圆角过渡：胶囊(28 全圆) ↔ 面板底座(18 圆角矩形)。
-    /// 与原 PillCorner 30↔18 的"胶囊变高矩形"同一变形语言。
+    /// 与原 PillCorner 30↔18 同曲线分工：圆角段用 KS_InOut 平滑过渡，
+    /// BackOut 回弹只留给高度生长（原版"高度回弹、圆角平滑"）。
     /// </summary>
     public static Animation PillCorner(double from, double to, bool expand)
     {
         var a = New(expand ? 320 : 260);
         a.Children.Add(KF(0d, null, CR(from)));
-        a.Children.Add(KF(1d, expand ? BackOut() : KS_InOut, CR(to)));
+        a.Children.Add(KF(1d, KS_InOut, CR(to)));
         return a;
     }
 
     // ---------------- 面板内容错峰淡入 / 淡出（对应原 TitleHost/NumHost 的先后节奏） ----------------
 
     /// <summary>
-    /// 面板行淡入：每行自带 (120 + index*70)ms 的入场延迟（延迟段内保持 0），
+    /// 面板行淡入：每行自带 (baseDelayMs + index*70)ms 的入场延迟（延迟段内保持 0），
     /// 呈现"一行接一行"的错峰节奏，与原 TitleHost 等 TMove 后才淡入的先后原则一致。
+    /// baseDelayMs 默认 120（面板已展开时的内容切换）；从收起态撑高时传 340，
+    /// 让行内容等结构完全落位后再显现。
     /// </summary>
-    public static Animation PanelRowIn(int index)
+    public static Animation PanelRowIn(int index, int baseDelayMs = 120)
     {
-        int delay = 120 + index * 70;
+        int delay = baseDelayMs + index * 70;
         var a = New(delay + 180);
         double delayFrac = (double)delay / (delay + 180);
 

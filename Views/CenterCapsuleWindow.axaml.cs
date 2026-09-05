@@ -183,7 +183,8 @@ public partial class CenterCapsuleWindow : Window
             await Task.WhenAll(
                 ConsoleAnimations.PanelExpand(ConsoleMetrics.PanelHeight).RunAsync(PanelHost, ct),
                 ConsoleAnimations.PillCorner(ConsoleMetrics.ToolHeight / 2, 18, expand: true).RunAsync(Pill, ct),
-                Task.WhenAll(rows.Select((r, i) => ConsoleAnimations.PanelRowIn(i).RunAsync(r, ct))));
+                // 340ms：等撑高（320ms）完成后行内容才开始错峰显现——结构先行、内容随后
+                Task.WhenAll(rows.Select((r, i) => ConsoleAnimations.PanelRowIn(i, 340).RunAsync(r, ct))));
         }
         catch (OperationCanceledException)
         {
