@@ -35,11 +35,13 @@ internal sealed class PptComBridge
     };
 
     // .NET 8 的 Marshal 类不再提供 GetActiveObject（仅 .NET Framework 有），
-    // 这里直接 P/Invoke ole32 的 GetActiveObject / CLSIDFromProgID 实现等价逻辑。
+    // 这里直接 P/Invoke 实现等价逻辑。
+    // 注意：CLSIDFromProgID 在 ole32.dll，但 GetActiveObject 在 oleaut32.dll
+    // （OLE Automation 库）——写错 DLL 会 EntryPointNotFoundException。
     [DllImport("ole32.dll", CharSet = CharSet.Unicode)]
     private static extern int CLSIDFromProgID(string lpszProgID, out Guid lpclsid);
 
-    [DllImport("ole32.dll")]
+    [DllImport("oleaut32.dll")]
     private static extern int GetActiveObject(ref Guid rclsid, IntPtr pvReserved,
         [MarshalAs(UnmanagedType.Interface)] out object? ppunk);
 
@@ -70,35 +72,45 @@ internal sealed class PptComBridge
         _poll.Tick += (_, _) => Poll();
     }
 
-    /// <summary>附着到正在运行的放映程序并开始轮询。返回是否成功。</summary>
+    /// <summary>附着到正在运行的放映程序并开始轮询。返回是否成功。
+    /// 任何异常都降级为 false（COM 失败绝不能阻断控制台吊起）。</summary>
     public bool Connect()
     {
-        // 依次尝试 MS PowerPoint / WPS 演示的 COM ProgID
-        object? app = null;
-        foreach (var progId in ComProgIds)
+        try
         {
-            app = GetRunningComObject(progId);
-            if (app is not null)
-                break;
+            // 依次尝试 MS PowerPoint / WPS 演示的 COM ProgID
+            object? app = null;
+            foreach (var progId in ComProgIds)
+            {
+                app = GetRunningComObject(progId);
+                if (app is not null)
+                    break;
+            }
+
+            _app = app;
+            if (_app is null)
+                return false;
+
+            _slideCount = TryCount();
+            _currentSlide = TryCurrentSlide();
+
+            // 无活跃放映（程序在跑但没有打开演示/未进入放映）时不接管：
+            // 页码恒为 -1，页面列表会只剩 1 页 —— 让 App 回到内部计数兜底。
+            if (_slideCount <= 0 || _currentSlide <= 0)
+            {
+                Disconnect();
+                return false;
+            }
+
+            _poll.Start();
+            return true;
         }
-
-        _app = app;
-        if (_app is null)
-            return false;
-
-        _slideCount = TryCount();
-        _currentSlide = TryCurrentSlide();
-
-        // 无活跃放映（程序在跑但没有打开演示/未进入放映）时不接管：
-        // 页码恒为 -1，页面列表会只剩 1 页 —— 让 App 回到内部计数兜底。
-        if (_slideCount <= 0 || _currentSlide <= 0)
+        catch (Exception ex)
         {
+            Logger.Error("PptComBridge.Connect 失败，降级内部计数", ex);
             Disconnect();
             return false;
         }
-
-        _poll.Start();
-        return true;
     }
 
     public void Disconnect()

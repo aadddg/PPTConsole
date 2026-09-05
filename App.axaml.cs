@@ -150,6 +150,8 @@ public partial class App : Application
                 _ink.SetCurrentPage(_bridge.CurrentSlide);
         }
 
+        Logger.Info($"ShowConsole: COM 接管={_comPages}, 页数={_bridge?.SlideCount ?? -1}, 当前页={_bridge?.CurrentSlide ?? -1}");
+
         _ink.AttachTo(screen);      // 墨迹层先就位（控制条保持在最上）
         _console.ShowOn(screen);
         ApplyTool(ConsoleTool.Select);
