@@ -38,7 +38,8 @@ internal static class CapsuleBehavior
         var handle = window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
         if (handle == IntPtr.Zero) return;
 
-        int ex = (int)Win32Interop.GetWindowLongPtr(handle, Win32Interop.GWL_EXSTYLE);
+        // EXSTYLE 理论上不超 int 范围，但统一走 long 消除 checked 转换溢出隐患
+        long ex = Win32Interop.GetWindowLongPtr(handle, Win32Interop.GWL_EXSTYLE).ToInt64();
         ex |= Win32Interop.WS_EX_NOACTIVATE;
         ex |= Win32Interop.WS_EX_TOOLWINDOW;   // 任务栏兜底：ShowInTaskbar 之外再保证不进任务栏
         Win32Interop.SetWindowLongPtr(handle, Win32Interop.GWL_EXSTYLE,

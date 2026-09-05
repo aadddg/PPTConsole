@@ -93,19 +93,29 @@ internal sealed class SlideshowWatcher
         Win32Interop.EnumWindows((hwnd, _) =>
         {
             // 只认可见、非最小化的顶层窗口（隐藏/最小化的同名窗口不误报放映开始）
-            if (!Win32Interop.IsWindowVisible(hwnd) || Win32Interop.IsIconic(hwnd))
-                return true;
-
-            string cls = GetClassName(hwnd);
-            string title = GetWindowTitle(hwnd);
-            string process = GetProcessName(hwnd);
-
-            if (IsSlideshowWindow(hwnd, cls, title, process))
+            try
             {
-                found = hwnd;
-                return false;   // 停止枚举
+                if (!Win32Interop.IsWindowVisible(hwnd) || Win32Interop.IsIconic(hwnd))
+                    return true;
+
+                string cls = GetClassName(hwnd);
+                string title = GetWindowTitle(hwnd);
+                string process = GetProcessName(hwnd);
+
+                if (IsSlideshowWindow(hwnd, cls, title, process))
+                {
+                    found = hwnd;
+                    return false;   // 停止枚举
+                }
+                return true;
             }
-            return true;
+            catch (Exception ex)
+            {
+                // native→managed 回调里抛出的未捕获异常会直接终止进程（闪退），
+                // 单个窗口查询失败只跳过该窗口，绝不向上传播。
+                Logger.Error("SlideshowWatcher 枚举窗口失败", ex);
+                return true;
+            }
         }, IntPtr.Zero);
 
         return found;
@@ -144,7 +154,9 @@ internal sealed class SlideshowWatcher
     /// <summary>放映窗特征：WS_POPUP 样式，或窗口尺寸覆盖其所在显示器（全屏）。</summary>
     private static bool IsPopupOrFullscreen(IntPtr hwnd)
     {
-        int style = (int)Win32Interop.GetWindowLongPtr(hwnd, Win32Interop.GWL_STYLE);
+        // GWL_STYLE 的 WS_POPUP 位 = 0x80000000，IntPtr 显式转 int 是 checked 的
+        // （会抛 OverflowException 导致闪退）——必须走 ToInt64 比较。
+        long style = Win32Interop.GetWindowLongPtr(hwnd, Win32Interop.GWL_STYLE).ToInt64();
         if ((style & Win32Interop.WS_POPUP) != 0)
             return true;
 

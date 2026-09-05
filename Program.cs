@@ -1,6 +1,8 @@
 using System;
 using System.Threading;
+using System.Threading.Tasks;
 using Avalonia;
+using PptConsole.Services;
 
 namespace PptConsole;
 
@@ -16,6 +18,16 @@ class Program
 
         if (!createdNew)
             return;
+
+        // ---- 全局异常钩子（死后取证：闪退堆栈落盘 %TEMP%\PptConsole\pptconsole.log） ----
+        Logger.LogStartup();
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            Logger.Error("AppDomain.UnhandledException", (Exception)e.ExceptionObject);
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            Logger.Error("TaskScheduler.UnobservedTaskException", e.Exception);
+            e.SetObserved();
+        };
 
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         GC.KeepAlive(mutex);

@@ -125,7 +125,7 @@ public partial class InkOverlayWindow : Window
         if (handle == IntPtr.Zero)
             return;
 
-        int ex = (int)Win32Interop.GetWindowLongPtr(handle, Win32Interop.GWL_EXSTYLE);
+        long ex = Win32Interop.GetWindowLongPtr(handle, Win32Interop.GWL_EXSTYLE).ToInt64();
         ex |= Win32Interop.WS_EX_NOACTIVATE;                       // 永不抢焦点
         ex |= Win32Interop.WS_EX_TOOLWINDOW;                       // 不进任务栏/Alt+Tab（兜底）
         if (_passthrough)

@@ -12,7 +12,9 @@ internal static class Win32Interop
     // ---------------- 窗口扩展样式 ----------------
     public const int GWL_EXSTYLE = -20;
     public const int GWL_STYLE = -16;
-    public const int WS_POPUP = unchecked((int)0x80000000);        // 放映窗典型样式（无标题栏/控制按钮）
+    public const long WS_POPUP = 0x80000000L;                      // 放映窗典型样式（无标题栏/控制按钮）
+        // 注意：必须用 long。GWL_STYLE 含 WS_POPUP 时返回值高位为 1，
+        // IntPtr 显式转 int 是 checked 的（会抛 OverflowException → 闪退）。
     public const int WS_EX_TOPMOST = 0x00000008;
     public const int WS_EX_TRANSPARENT = 0x00000020;   // 点击穿透（墨迹层"选择"态）
     public const int WS_EX_TOOLWINDOW = 0x00000080;     // 不进任务栏 / 不参与 Alt+Tab（ShowInTaskbar 的 Win32 兜底）

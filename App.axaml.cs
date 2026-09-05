@@ -42,6 +42,13 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // UI 线程未处理异常：记录后吞掉（托盘常驻程序不应因偶发 UI 异常退出）
+        Dispatcher.UIThread.UnhandledException += (_, e) =>
+        {
+            Logger.Error("Dispatcher.UnhandledException", e.Exception);
+            e.Handled = true;
+        };
+
         if (ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
             return;
 
