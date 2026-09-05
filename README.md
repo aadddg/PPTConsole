@@ -34,7 +34,7 @@ dotnet run -c Debug
 dotnet run -c Debug -- --demo
 ```
 
-托盘图标（左下角）左键可手动吊起/收回控制台，右键菜单退出。
+托盘图标（左下角）左键唤起控制台（已显示则无操作），右键菜单可"收起控制台"或退出。
 
 ## 操作映射
 
@@ -61,7 +61,7 @@ App.axaml / App.axaml.cs         组装：放映检测→吊起、事件总线�
 CapsuleBehavior.cs               胶囊窗公共行为（静态：窗口壳/NOACTIVATE/Place/进出场）
 InkOverlayWindow                 全屏自绘墨迹层（穿透切换/压感/橡皮/撤销/按页记忆）
 ConsoleAnimations.cs             动画库（原 HudAnimations 曲线库的可逆交互化）
-SlideshowWatcher.cs              Win32 轮询 PowerPoint 放映窗口（screenClass/WPS 候选）+ 显示器定位
+SlideshowWatcher.cs              Win32 轮询放映窗口（进程名 powerpnt/wpp + 类名 + 标题关键词组合）+ 显示器定位
 PptComBridge.cs                  COM 晚期绑定：页码/页数轮询、GotoSlide 跳页、缩略图导出（任一翻页方式都校准墨迹页码）
 PageListWindow                   页面列表：缩略图网格 + 当前页高亮 + 点击跳页（COM 或兜底页码）
 InputNative / Win32Interop       SendInput 方向键；窗口样式/显示器/键盘 P/Invoke
@@ -78,5 +78,5 @@ Styles/ ConsoleTheme+Geometries  设计令牌与图标几何
 ## 已知边界
 
 - **COM 接管前提**：`Connect()` 会校验确实存在活跃放映（已打开演示且处于放映态），否则自动降级为内部计数＋兜底页码——PowerPoint/WPS 未运行、未打开演示或未进入放映时，基本翻页与墨迹页码照常可用。
-- **WPS 兼容**：放映窗口按类名 + 可见性/非最小化匹配（候选 `screenClass` / `wppslideshowwnd`，已排除不放映也存在的 WPS 通用主窗 `KWMainFrame` 误报）；COM 依次尝试 `PowerPoint.Application` / `KWPP.Application`，WPS 的 `GotoSlide`/`Slide.Export` 接口兼容性未在真机逐项验证，失败即降级。
+- **WPS 兼容**：放映窗口按"进程名（powerpnt.exe / wpp.exe）+ 类名（screenClass / wppslideshowwnd）+ 标题关键词（幻灯片放映 / Slide Show）"三重组合匹配，进程匹配是硬条件（杜绝误报），进程名获取失败时退化为类名匹配；COM 依次尝试 `PowerPoint.Application` / `KWPP.Application`，WPS 的 `GotoSlide`/`Slide.Export` 接口兼容性未在真机逐项验证，失败即降级。
 - **管理员权限（UIPI）**：放映程序以管理员运行时 `SendInput` 会被 UIPI 拦截（返回 0）。已加回退：COM 接管下翻页自动改走 `GotoSlide`（不受 UIPI 限制）；无 COM 时需以同权限运行本程序。

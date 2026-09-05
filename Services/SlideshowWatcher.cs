@@ -6,21 +6,36 @@ using Avalonia.Threading;
 namespace PptConsole.Services;
 
 /// <summary>
-/// 轮询放映窗口（EnumWindows 按类名 + 可见性/非最小化匹配），
+/// 轮询放映窗口（EnumWindows：可见性 + 进程名 + 类名 + 标题关键词组合判定），
 /// 报告放映开始/结束与其所在显示器的物理边界。
-/// WPS 的放映窗口类名未逐项验证，后续在 SlideClasses 里追加即可。
+/// MS PowerPoint（powerpnt.exe / screenClass）与 WPS 演示（wpp.exe / 标题含"幻灯片放映"）均覆盖。
 /// </summary>
 internal sealed class SlideshowWatcher
 {
     /// <summary>
-    /// 放映窗口类名候选（MS PowerPoint = screenClass；WPS 演示放映 = wppslideshowwnd）。
-    /// 不再使用 WPS 通用主窗 KWMainFrame —— 它不放映也存在，命中即误报。
-    /// 匹配时走 EnumWindows + 可见性/非最小化校验，排除隐藏或最小化的同名窗口。
+    /// 放映窗口类名候选。MS PowerPoint 与 WPS 放映窗多为 screenClass；
+    /// wppslideshowwnd 为 WPS 候选。实际类名随版本而异，因此另配
+    /// 进程名 + 标题关键词双兜底（见 IsSlideshowWindow）。
     /// </summary>
     private static readonly string[] SlideClasses =
     {
-        "screenClass",          // MS PowerPoint 放映窗
-        "wppslideshowwnd",      // WPS 演示放映窗（候选，未逐项验证）
+        "screenClass",          // MS PowerPoint / WPS 放映窗（常见）
+        "wppslideshowwnd",      // WPS 演示放映窗（候选）
+    };
+
+    /// <summary>放映程序进程名（小写，含扩展名）：MS PowerPoint / WPS 演示。</summary>
+    private static readonly string[] SlideProcessNames =
+    {
+        "powerpnt.exe",
+        "wpp.exe",
+    };
+
+    /// <summary>放映窗口标题关键词（WPS 中文 / MS PowerPoint 中英文）。</summary>
+    private static readonly string[] SlideTitleKeywords =
+    {
+        "幻灯片放映",
+        "演示文稿放映",
+        "slide show",
     };
 
     private const int PollMilliseconds = 1000;
@@ -81,18 +96,67 @@ internal sealed class SlideshowWatcher
                 return true;
 
             string cls = GetClassName(hwnd);
-            foreach (var candidate in SlideClasses)
+            string title = GetWindowTitle(hwnd);
+            string process = GetProcessName(hwnd);
+
+            if (IsSlideshowWindow(cls, title, process))
             {
-                if (cls == candidate)
-                {
-                    found = hwnd;
-                    return false;   // 停止枚举
-                }
+                found = hwnd;
+                return false;   // 停止枚举
             }
             return true;
         }, IntPtr.Zero);
 
         return found;
+    }
+
+    /// <summary>
+    /// 三重判定：进程名 ∈ {powerpnt,wpp}.exe 是硬条件（杜绝其他软件的误报），
+    /// 类名或标题任一命中即认定为放映窗口。
+    /// 进程名获取失败（权限受限，如放映程序以管理员运行）时退化为纯类名匹配。
+    /// </summary>
+    private static bool IsSlideshowWindow(string cls, string title, string process)
+    {
+        bool classMatch = Array.IndexOf(SlideClasses, cls) >= 0;
+        bool titleMatch = title.Length > 0 &&
+            Array.Exists(SlideTitleKeywords, k => title.Contains(k, StringComparison.OrdinalIgnoreCase));
+
+        if (process.Length == 0)
+            return classMatch;   // 拿不到进程名 → 退回类名匹配
+
+        if (Array.IndexOf(SlideProcessNames, process) < 0)
+            return false;
+
+        return classMatch || titleMatch;
+    }
+
+    private static string GetWindowTitle(IntPtr hwnd)
+    {
+        var sb = new System.Text.StringBuilder(256);
+        Win32Interop.GetWindowText(hwnd, sb, sb.Capacity);
+        return sb.ToString();
+    }
+
+    private static string GetProcessName(IntPtr hwnd)
+    {
+        Win32Interop.GetWindowThreadProcessId(hwnd, out uint pid);
+        if (pid == 0)
+            return string.Empty;
+
+        var handle = Win32Interop.OpenProcess(Win32Interop.PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+        if (handle == IntPtr.Zero)
+            return string.Empty;
+
+        try
+        {
+            var sb = new System.Text.StringBuilder(256);
+            Win32Interop.GetModuleBaseName(handle, IntPtr.Zero, sb, (uint)sb.Capacity);
+            return sb.ToString().ToLowerInvariant();
+        }
+        finally
+        {
+            Win32Interop.CloseHandle(handle);
+        }
     }
 
     private static string GetClassName(IntPtr hwnd)

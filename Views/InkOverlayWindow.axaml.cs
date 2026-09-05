@@ -63,6 +63,12 @@ public partial class InkOverlayWindow : Window
     {
         InitializeComponent();
 
+        // 全屏墨迹层：不进任务栏（否则任务栏出现本程序图标，
+        // 点击后因 NOACTIVATE 无法激活，表现为"点一下直接消失"）
+        ShowInTaskbar = false;
+        ShowActivated = false;
+        Focusable = false;
+
         Root.PointerPressed += OnPointerPressed;
         Root.PointerMoved += OnPointerMoved;
         Root.PointerReleased += OnPointerReleased;

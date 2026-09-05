@@ -266,14 +266,11 @@ public partial class App : Application
         {
         }
 
-        // 左键托盘：手动吊起/收回（调试与无放映场景）
+        // 左键托盘：只唤起，不收起（避免"点一下控制台直接消失"的困惑）。
+        // 收起走右键菜单"收起控制台"。
         _tray.Clicked += (_, _) => Dispatcher.UIThread.Post(() =>
         {
-            if (_console is { IsShown: true })
-            {
-                HideConsole();
-            }
-            else
+            if (_console is not { IsShown: true })
             {
                 var screen = _console?.Screens.Primary;
                 if (screen is not null && _console is not null)
@@ -282,6 +279,9 @@ public partial class App : Application
         });
 
         var menu = new NativeMenu();
+        var hideItem = new NativeMenuItem { Header = "收起控制台" };
+        hideItem.Click += (_, _) => Dispatcher.UIThread.Post(HideConsole);
+        menu.Items.Add(hideItem);
         var exitItem = new NativeMenuItem { Header = "退出" };
         exitItem.Click += (_, _) => _desktop?.Shutdown();
         menu.Items.Add(exitItem);
