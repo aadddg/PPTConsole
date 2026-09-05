@@ -100,7 +100,7 @@ internal sealed class SlideshowWatcher
             string title = GetWindowTitle(hwnd);
             string process = GetProcessName(hwnd);
 
-            if (IsSlideshowWindow(cls, title, process))
+            if (IsSlideshowWindow(hwnd, cls, title, process))
             {
                 found = hwnd;
                 return false;   // 停止枚举
@@ -113,13 +113,14 @@ internal sealed class SlideshowWatcher
 
     /// <summary>
     /// 判定逻辑（三重信号，防误报）：
-    /// - 类名 ∈ {screenClass, wppslideshowwnd}：强信号，直接命中；
     /// - 标题含"幻灯片放映/Slide Show"：极特异（用户实测 WPS 放映窗标题
     ///   "WPS演示幻灯片放映-[xxx.pptx]"），即使进程名不在候选也接受；
     /// - 进程名 ∈ {powerpnt,wpp,wps}.exe：作为已知放映程序的确认；
+    /// - 类名命中但标题未命中时：要求放映窗口特征（WS_POPUP / 全屏），
+    ///   防止不放映也存在的同名类窗口误报；
     /// 进程名获取失败（权限受限）时退化为"类名或标题"匹配。
     /// </summary>
-    private static bool IsSlideshowWindow(string cls, string title, string process)
+    private static bool IsSlideshowWindow(IntPtr hwnd, string cls, string title, string process)
     {
         bool classMatch = Array.IndexOf(SlideClasses, cls) >= 0;
         bool titleMatch = title.Length > 0 &&
@@ -129,10 +130,46 @@ internal sealed class SlideshowWatcher
             return classMatch || titleMatch;   // 拿不到进程名：标题"幻灯片放映"足够特异
 
         if (Array.IndexOf(SlideProcessNames, process) >= 0)
-            return classMatch || titleMatch;
+        {
+            if (titleMatch)
+                return true;
+            // 仅类名命中：必须是放映窗口特征（WS_POPUP 无控制按钮 / 全屏）
+            return classMatch && IsPopupOrFullscreen(hwnd);
+        }
 
         // 进程不是已知放映程序：仅标题命中才接受（防其他软件误报）
         return titleMatch;
+    }
+
+    /// <summary>放映窗特征：WS_POPUP 样式，或窗口尺寸覆盖其所在显示器（全屏）。</summary>
+    private static bool IsPopupOrFullscreen(IntPtr hwnd)
+    {
+        int style = (int)Win32Interop.GetWindowLongPtr(hwnd, Win32Interop.GWL_STYLE);
+        if ((style & Win32Interop.WS_POPUP) != 0)
+            return true;
+
+        if (!Win32Interop.GetWindowRect(hwnd, out var rect))
+            return false;
+
+        var monitor = Win32Interop.MonitorFromWindow(hwnd, Win32Interop.MONITOR_DEFAULTTONEAREST);
+        if (monitor == IntPtr.Zero)
+            return false;
+
+        var info = new Win32Interop.MONITORINFOEX
+        {
+            cbSize = Marshal.SizeOf<Win32Interop.MONITORINFOEX>(),
+        };
+
+        if (!Win32Interop.GetMonitorInfo(monitor, ref info))
+            return false;
+
+        int w = rect.Right - rect.Left;
+        int h = rect.Bottom - rect.Top;
+        int mw = info.rcMonitor.Right - info.rcMonitor.Left;
+        int mh = info.rcMonitor.Bottom - info.rcMonitor.Top;
+
+        // 容差 2px（部分窗口在边界有 1px 偏差）
+        return w >= mw - 2 && h >= mh - 2;
     }
 
     private static string GetWindowTitle(IntPtr hwnd)

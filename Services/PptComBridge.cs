@@ -22,11 +22,16 @@ internal sealed class PptComBridge
 {
     private const int PollIntervalMs = 400;
 
-    /// <summary>COM ProgID 候选：MS PowerPoint 优先，WPS 演示（KWPP.Application）兜底。</summary>
+    /// <summary>
+    /// COM ProgID 候选：MS PowerPoint 优先，WPS 演示依次尝试。
+    /// KWPP.Application = WPS 2019+；WPP.Application = WPS 2013 等历史版本。
+    /// 每个候选 GetRunningComObject 失败（未运行/未注册）即跳过，不影响后续。
+    /// </summary>
     private static readonly string[] ComProgIds =
     {
         "PowerPoint.Application",
         "KWPP.Application",
+        "WPP.Application",
     };
 
     // .NET 8 的 Marshal 类不再提供 GetActiveObject（仅 .NET Framework 有），

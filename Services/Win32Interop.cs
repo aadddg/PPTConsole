@@ -11,6 +11,8 @@ internal static class Win32Interop
 {
     // ---------------- 窗口扩展样式 ----------------
     public const int GWL_EXSTYLE = -20;
+    public const int GWL_STYLE = -16;
+    public const int WS_POPUP = unchecked((int)0x80000000);        // 放映窗典型样式（无标题栏/控制按钮）
     public const int WS_EX_TOPMOST = 0x00000008;
     public const int WS_EX_TRANSPARENT = 0x00000020;   // 点击穿透（墨迹层"选择"态）
     public const int WS_EX_TOOLWINDOW = 0x00000080;     // 不进任务栏 / 不参与 Alt+Tab（ShowInTaskbar 的 Win32 兜底）
@@ -94,6 +96,9 @@ internal static class Win32Interop
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr")]
     public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtr")]
     public static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);

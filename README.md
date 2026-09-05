@@ -78,5 +78,5 @@ Styles/ ConsoleTheme+Geometries  设计令牌与图标几何
 ## 已知边界
 
 - **COM 接管前提**：`Connect()` 会校验确实存在活跃放映（已打开演示且处于放映态），否则自动降级为内部计数＋兜底页码——PowerPoint/WPS 未运行、未打开演示或未进入放映时，基本翻页与墨迹页码照常可用。
-- **WPS 兼容**：放映窗口按"进程名（powerpnt.exe / wpp.exe）+ 类名（screenClass / wppslideshowwnd）+ 标题关键词（幻灯片放映 / Slide Show）"三重组合匹配，进程匹配是硬条件（杜绝误报），进程名获取失败时退化为类名匹配；COM 依次尝试 `PowerPoint.Application` / `KWPP.Application`，WPS 的 `GotoSlide`/`Slide.Export` 接口兼容性未在真机逐项验证，失败即降级。
+- **WPS 兼容**：放映窗口按"进程名（powerpnt.exe / wpp.exe / wps.exe）+ 类名（screenClass / wppslideshowwnd）+ 标题关键词（幻灯片放映 / 演示文稿放映 / Slide Show）"三重组合匹配；标题命中是强信号（WPS 放映窗标题实测为 `WPS演示幻灯片放映-[xxx.pptx]`），进程匹配可防误报，仅类名命中时再校验 WS_POPUP/全屏特征；COM 依次尝试 `PowerPoint.Application` / `KWPP.Application`（WPS 2019+）/ `WPP.Application`（WPS 2013 等历史版本），`GotoSlide`/`Slide.Export` 兼容性未在真机逐项验证，失败即降级。
 - **管理员权限（UIPI）**：放映程序以管理员运行时 `SendInput` 会被 UIPI 拦截（返回 0）。已加回退：COM 接管下翻页自动改走 `GotoSlide`（不受 UIPI 限制）；无 COM 时需以同权限运行本程序。
