@@ -167,6 +167,7 @@ public partial class CenterCapsuleWindow : Window
 
     private async Task ExpandPanelAsync(Tool tool)
     {
+        FreezePanelState();
         _panelCts?.Cancel();
         _panelCts?.Dispose();
         _panelCts = new CancellationTokenSource();
@@ -175,19 +176,36 @@ public partial class CenterCapsuleWindow : Window
         ShowPanelFor(tool, resetRows: true);
         PanelHost.IsVisible = true;
         _panelOpen = true;
-        Reposition(open: true);   // 窗口自适应用到面板+胶囊高度
+
+        // 窗口先一步扩到"面板+胶囊+回弹余量"高度：几何原子变更（Place 单次 SetWindowPos），
+        // 且此瞬间扩展区全透明、面板高度仍为冻结值 → 视觉无感，只为动画腾出过冲空间
+        Reposition(open: true, headroom: true);
 
         var rows = RowsFor(tool);
         try
         {
+            // 阶段一：胶囊上缘变方（28→18）——"先转变为方形"，从当前值出发可随时打断
+            double r0 = Pill.CornerRadius.TopLeft;
+            if (Math.Abs(r0 - 18) > 0.5)
+                await ConsoleAnimations.PillCorner(r0, 18, 140).RunAsync(Pill, ct);
+            ct.ThrowIfCancellationRequested();
+
+            // 阶段二：面板向上撑开（BackOut 回弹生长）+ 行内容等结构落位后错峰显现
             await Task.WhenAll(
-                ConsoleAnimations.PanelExpand(ConsoleMetrics.PanelHeight).RunAsync(PanelHost, ct),
-                ConsoleAnimations.PillCorner(ConsoleMetrics.ToolHeight / 2, 18, expand: true).RunAsync(Pill, ct),
-                // 340ms：等撑高（320ms）完成后行内容才开始错峰显现——结构先行、内容随后
-                Task.WhenAll(rows.Select((r, i) => ConsoleAnimations.PanelRowIn(i, 340).RunAsync(r, ct))));
+                ConsoleAnimations.PanelExpand(PanelHost.Height, ConsoleMetrics.PanelHeight, PanelHost.Opacity)
+                    .RunAsync(PanelHost, ct),
+                Task.WhenAll(rows.Select((r, i) =>
+                    ConsoleAnimations.PanelRowIn(i, 300, r.Opacity).RunAsync(r, ct))));
         }
         catch (OperationCanceledException)
         {
+            return;   // 被打断：状态已冻结在当前值，交给下一次开/合衔接
+        }
+        finally
+        {
+            // 动画落定后收掉回弹余量（纯透明区，视觉无感）
+            if (!ct.IsCancellationRequested)
+                Reposition(open: true, headroom: false);
         }
     }
 
@@ -196,6 +214,7 @@ public partial class CenterCapsuleWindow : Window
         if (!_panelOpen)
             return;
 
+        FreezePanelState();
         _panelCts?.Cancel();
         _panelCts?.Dispose();
         _panelCts = new CancellationTokenSource();
@@ -204,32 +223,44 @@ public partial class CenterCapsuleWindow : Window
         var rows = RowsFor(_tool);
         try
         {
+            // 阶段一：面板向下收拢（行内容同步错峰退场）
             await Task.WhenAll(
-                ConsoleAnimations.PanelCollapse(ConsoleMetrics.PanelHeight).RunAsync(PanelHost, ct),
-                ConsoleAnimations.PillCorner(18, ConsoleMetrics.ToolHeight / 2, expand: false).RunAsync(Pill, ct),
-                Task.WhenAll(rows.Select((r, i) => ConsoleAnimations.PanelRowOut(i, rows.Length).RunAsync(r, ct))));
+                ConsoleAnimations.PanelCollapse(PanelHost.Height, 0, PanelHost.Opacity).RunAsync(PanelHost, ct),
+                Task.WhenAll(rows.Select((r, i) =>
+                    ConsoleAnimations.PanelRowOut(i, rows.Length, r.Opacity).RunAsync(r, ct))));
+            ct.ThrowIfCancellationRequested();
+
+            // 阶段二：胶囊上缘回圆（方形→胶囊）
+            double r0 = Pill.CornerRadius.TopLeft;
+            if (Math.Abs(r0 - ConsoleMetrics.ToolHeight / 2) > 0.5)
+                await ConsoleAnimations.PillCorner(r0, ConsoleMetrics.ToolHeight / 2, 140).RunAsync(Pill, ct);
         }
         catch (OperationCanceledException)
         {
+            return;
         }
 
-        if (!ct.IsCancellationRequested)
-            CollapsePanelInstant();
+        CollapsePanelInstant();
     }
 
     private async Task SwitchPanelContentAsync(Tool tool)
     {
+        FreezePanelState();
         _panelCts?.Cancel();
         _panelCts?.Dispose();
         _panelCts = new CancellationTokenSource();
         var ct = _panelCts.Token;
+
+        // 高度/圆角可能停在半途（快速连点打断开合）：切换内容时同步"补完"，
+        // 避免面板卡在中间高度导致内容被裁剪
+        Reposition(open: true, headroom: true);
 
         var other = tool == Tool.Pen ? Tool.Eraser : Tool.Pen;
         var oldRows = RowsFor(other);
         try
         {
             await Task.WhenAll(oldRows.Select((r, i) =>
-                ConsoleAnimations.PanelRowOut(i, oldRows.Length).RunAsync(r, ct)));
+                ConsoleAnimations.PanelRowOut(i, oldRows.Length, r.Opacity).RunAsync(r, ct)));
         }
         catch (OperationCanceledException)
         {
@@ -243,11 +274,46 @@ public partial class CenterCapsuleWindow : Window
         var rows = RowsFor(tool);
         try
         {
-            await Task.WhenAll(rows.Select((r, i) => ConsoleAnimations.PanelRowIn(i).RunAsync(r, ct)));
+            double h0 = PanelHost.Height, op0 = PanelHost.Opacity;
+            double r0 = Pill.CornerRadius.TopLeft;
+
+            var grow = h0 < ConsoleMetrics.PanelHeight - 0.5
+                ? ConsoleAnimations.PanelExpand(h0, ConsoleMetrics.PanelHeight, op0).RunAsync(PanelHost, ct)
+                : Task.CompletedTask;
+            var corner = r0 > 18.5
+                ? ConsoleAnimations.PillCorner(r0, 18, 140).RunAsync(Pill, ct)
+                : Task.CompletedTask;
+
+            await Task.WhenAll(
+                grow,
+                corner,
+                Task.WhenAll(rows.Select((r, i) =>
+                    ConsoleAnimations.PanelRowIn(i, 120, r.Opacity).RunAsync(r, ct))));
         }
         catch (OperationCanceledException)
         {
+            return;
         }
+        finally
+        {
+            if (!ct.IsCancellationRequested)
+                Reposition(open: true, headroom: false);
+        }
+    }
+
+    /// <summary>
+    /// 把当前（可能正处于动画中间态的）视觉值固化为本地值。
+    /// Avalonia 取消动画后属性会回落到本地值——若不冻结，回落到的是过期本地值
+    /// （如高度回落到 0），快速连点时面板会瞬移/爆开。冻结后回落值=当前画面，视觉连续。
+    /// </summary>
+    private void FreezePanelState()
+    {
+        PanelHost.Height = PanelHost.Height;
+        PanelHost.Opacity = PanelHost.Opacity;
+        var cr = Pill.CornerRadius;
+        Pill.CornerRadius = new CornerRadius(cr.TopLeft, cr.TopRight, cr.BottomLeft, cr.BottomRight);
+        foreach (var row in new[] { PenRowColor, PenRowSize, EraserRowSize })
+            row.Opacity = row.Opacity;
     }
 
     private void CollapsePanelInstant()
@@ -289,8 +355,12 @@ public partial class CenterCapsuleWindow : Window
         icon.IsVisible = !active;   // 未激活：白色描线图标
     }
 
-    /// <summary>按开关状态把窗口定位到屏幕水平居中、底边贴 28px 边距处。</summary>
-    private void Reposition(bool open)
+    /// <summary>
+    /// 按开关状态把窗口定位到屏幕水平居中、底边贴 28px 边距处。
+    /// headroom：开合动画期间额外预留回弹余量（BackOut 过冲不被窗口顶边平切），
+    /// 动画落定后以 headroom=false 收掉。
+    /// </summary>
+    private void Reposition(bool open, bool headroom = false)
     {
         if (_screen is null)
             return;
@@ -298,7 +368,9 @@ public partial class CenterCapsuleWindow : Window
         double scaling = _screen.Scaling > 0 ? _screen.Scaling : 1d;
         double screenWidthDip = _screen.Bounds.Width / scaling;
         double leftDip = (screenWidthDip - ConsoleMetrics.ToolWidth) / 2;
-        double heightDip = open ? ConsoleMetrics.ToolStackHeight : ConsoleMetrics.ToolHeight;
+        double heightDip = open
+            ? ConsoleMetrics.ToolStackHeight + (headroom ? ConsoleMetrics.PanelOvershootHeadroom : 0)
+            : ConsoleMetrics.ToolHeight;
 
         CapsuleBehavior.Place(this, _screen, leftDip, ConsoleMetrics.ToolWidth, heightDip, ConsoleMetrics.BottomMarginDip);
     }

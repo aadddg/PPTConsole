@@ -61,6 +61,7 @@ internal static class CapsuleBehavior
     {
         double scaling = screen.Scaling > 0 ? screen.Scaling : 1d;
 
+        // 先同步 Avalonia 侧期望尺寸：布局回调时与窗口实际 client 尺寸一致，不引发二次 resize
         window.Width = widthDip;
         window.Height = heightDip;
 
@@ -68,8 +69,23 @@ internal static class CapsuleBehavior
         int y = screen.Bounds.Bottom
                 - (int)Math.Round(bottomMarginDip * scaling)
                 - (int)Math.Round(heightDip * scaling);
+        int w = (int)Math.Round(widthDip * scaling);
+        int h = (int)Math.Round(heightDip * scaling);
 
-        window.Position = new PixelPoint(x, y);
+        var handle = window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        if (handle != IntPtr.Zero)
+        {
+            // 尺寸+位置必须在一次原生调用里原子生效。
+            // 分开设置时（先 resize 后 move，或反之），DWM 会在"只改了一半"的中间态
+            // 合成一帧 → 内容整体跳位（中胶囊面板开合时最明显：胶囊先跳上/跳下再弹回）。
+            Win32Interop.SetWindowPos(handle, IntPtr.Zero, x, y, w, h,
+                Win32Interop.SWP_NOZORDER | Win32Interop.SWP_NOACTIVATE);
+        }
+        else
+        {
+            // 句柄未就绪（窗口尚未显示，理论仅初始化路径）：退回普通设置，无可见状态可闪
+            window.Position = new PixelPoint(x, y);
+        }
     }
 
     public static void EnsureVisible(Window window)

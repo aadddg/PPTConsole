@@ -60,70 +60,74 @@ internal static class ConsoleAnimations
     // ---------------- 工具面板撑高 / 收回（对应原 PillHeight + PillCorner 段） ----------------
 
     /// <summary>
-    /// 面板撑高：高度 0→height（BackOut 生长，对应原 60→90 撑高段）。
-    /// 不透明度与高度同段同曲线（对齐原 PillAppear：背景显形与形变同步完成，
-    /// 内容则由 PanelRowIn 等结构落位后再错峰显现——"结构先行、内容随后"）。
+    /// 面板撑高：fromHeight→toHeight（BackOut 生长，对应原 60→90 撑高段）。
+    /// from 值取控件当前值（可能是被打断动画的中间值）——关键帧首帧即当前画面，
+    /// 快速连点不会出现"先跳到 104 再长"的爆开；时长按剩余距离等比缩短，打断-恢复连贯。
     /// </summary>
-    public static Animation PanelExpand(double height, double bounce = 0.275)
+    public static Animation PanelExpand(double fromHeight, double toHeight, double fromOpacity)
     {
-        var a = New(320);
-        a.Children.Add(KF(0d, null, H(0d), Op(0)));
-        a.Children.Add(KF(1d, BackOut(bounce), H(height), Op(1)));
+        double ms = Math.Clamp(300 * Math.Abs(toHeight - fromHeight) / Math.Max(toHeight, 1), 100, 300);
+        var a = New(ms);
+        a.Children.Add(KF(0d, null, H(fromHeight), Op(fromOpacity)));
+        a.Children.Add(KF(1d, BackOut(), H(toHeight), Op(1d)));
         return a;
     }
 
-    /// <summary>面板收回：高度→0（easeInOut），不透明度前 40% 先退场。</summary>
-    public static Animation PanelCollapse(double height)
+    /// <summary>面板收回：fromHeight→toHeight（easeInOut），不透明度前 40% 先退场。</summary>
+    public static Animation PanelCollapse(double fromHeight, double toHeight, double fromOpacity)
     {
-        var a = New(260);
-        a.Children.Add(KF(0d, null, H(height), Op(1)));
-        a.Children.Add(KF(0.4d, KS_In, Op(0)));
-        a.Children.Add(KF(1d, KS_InOut, H(0d)));
+        double ms = Math.Clamp(240 * Math.Abs(fromHeight - toHeight) / Math.Max(fromHeight, 1), 80, 240);
+        var a = New(ms);
+        a.Children.Add(KF(0d, null, H(fromHeight), Op(fromOpacity)));
+        a.Children.Add(KF(0.4d, KS_In, Op(0d)));
+        a.Children.Add(KF(1d, KS_InOut, H(toHeight)));
         return a;
     }
+
+    /// <summary>胶囊底部圆角（=ToolHeight/2 全圆）：两段式结构里胶囊底部的 identity，恒定不变。</summary>
+    private const double PillBottomRadius = 28;
 
     /// <summary>
-    /// 工具胶囊圆角过渡：胶囊(28 全圆) ↔ 面板底座(18 圆角矩形)。
-    /// 与原 PillCorner 30↔18 同曲线分工：圆角段用 KS_InOut 平滑过渡，
-    /// BackOut 回弹只留给高度生长（原版"高度回弹、圆角平滑"）。
+    /// 工具胶囊上缘圆角过渡：28(全圆)↔18(与面板底座拼合)。
+    /// 只动上缘：本项目的胶囊和面板是两段结构，若像原版单段结构那样四角一起过渡，
+    /// 展开时胶囊底部会被一起压平，"胶囊散架"；底部恒为全圆，只有与面板拼合的上缘变方。
+    /// 曲线 KS_InOut（原版"高度回弹、圆角平滑"的分工）。
     /// </summary>
-    public static Animation PillCorner(double from, double to, bool expand)
+    public static Animation PillCorner(double fromTop, double toTop, double durationMs)
     {
-        var a = New(expand ? 320 : 260);
-        a.Children.Add(KF(0d, null, CR(from)));
-        a.Children.Add(KF(1d, KS_InOut, CR(to)));
+        var a = New(durationMs);
+        a.Children.Add(KF(0d, null, CRTB(fromTop)));
+        a.Children.Add(KF(1d, KS_InOut, CRTB(toTop)));
         return a;
     }
 
     // ---------------- 面板内容错峰淡入 / 淡出（对应原 TitleHost/NumHost 的先后节奏） ----------------
 
     /// <summary>
-    /// 面板行淡入：每行自带 (baseDelayMs + index*70)ms 的入场延迟（延迟段内保持 0），
-    /// 呈现"一行接一行"的错峰节奏，与原 TitleHost 等 TMove 后才淡入的先后原则一致。
-    /// baseDelayMs 默认 120（面板已展开时的内容切换）；从收起态撑高时传 340，
-    /// 让行内容等结构完全落位后再显现。
+    /// 面板行淡入：每行自带 (baseDelayMs + index*70)ms 的入场延迟（延迟段内保持 fromOpacity），
+    /// 呈现"一行接一行"的错峰节奏——结构落位后内容才显现。
     /// </summary>
-    public static Animation PanelRowIn(int index, int baseDelayMs = 120)
+    public static Animation PanelRowIn(int index, int baseDelayMs, double fromOpacity)
     {
         int delay = baseDelayMs + index * 70;
         var a = New(delay + 180);
         double delayFrac = (double)delay / (delay + 180);
 
-        a.Children.Add(KF(0d, null, Op(0)));
-        a.Children.Add(KF(delayFrac, KS_In, Op(0)));
+        a.Children.Add(KF(0d, null, Op(fromOpacity)));
+        a.Children.Add(KF(delayFrac, KS_In, Op(fromOpacity)));
         a.Children.Add(KF(1d, KS_Out, Op(1)));
         return a;
     }
 
     /// <summary>面板行淡出：靠后的行先退（镜像错峰）。</summary>
-    public static Animation PanelRowOut(int index, int rowCount)
+    public static Animation PanelRowOut(int index, int rowCount, double fromOpacity)
     {
         int delay = (rowCount - 1 - index) * 40;
         var a = New(delay + 100);
         double delayFrac = (double)delay / (delay + 100);
 
-        a.Children.Add(KF(0d, null, Op(1)));
-        a.Children.Add(KF(delayFrac, KS_In, Op(1)));
+        a.Children.Add(KF(0d, null, Op(fromOpacity)));
+        a.Children.Add(KF(delayFrac, KS_In, Op(fromOpacity)));
         a.Children.Add(KF(1d, KS_In, Op(0)));
         return a;
     }
@@ -164,7 +168,8 @@ internal static class ConsoleAnimations
     private static Setter Op(double v) => Set(Visual.OpacityProperty, v);
     private static Setter SX(double v) => Set(ScaleTransform.ScaleXProperty, v);
     private static Setter SY(double v) => Set(ScaleTransform.ScaleYProperty, v);
-    private static Setter CR(double v) => Set(Border.CornerRadiusProperty, new CornerRadius(v));
+    private static Setter CRTB(double top) => Set(Border.CornerRadiusProperty,
+        new CornerRadius(top, top, PillBottomRadius, PillBottomRadius));
     private static Setter H(double v) => Set(Border.HeightProperty, v);
 
     private static Setter Set(AvaloniaProperty property, object value) => new(property, value);
